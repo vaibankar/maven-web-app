@@ -1,54 +1,25 @@
 node{
     
     stage('Clone repo'){
-        git credentialsId: 'GIT-Credentials', url: 'https://github.com/ashokitschool/maven-web-app.git'
+        git 'https://github.com/hackerboypk/maven-web-app.git'
     }
     
     stage('Maven Build'){
-        def mavenHome = tool name: "Maven-3.8.6", type: "maven"
+        def mavenHome = tool name: "Maven-3.9.3", type: "maven"
         def mavenCMD = "${mavenHome}/bin/mvn"
         sh "${mavenCMD} clean package"
     }
-    
-    stage('SonarQube analysis') {       
+     stage('SonarQube analysis') {       
         withSonarQubeEnv('Sonar-Server-7.8') {
        	sh "mvn sonar:sonar"    	
+       }
     }
-        
     stage('upload war to nexus'){
-	steps{
-		nexusArtifactUploader artifacts: [	
-			[
-				artifactId: '01-maven-web-app',
-				classifier: '',
-				file: 'target/01-maven-web-app.war',
-				type: war		
-			]	
-		],
-		credentialsId: 'nexus3',
-		groupId: 'in.ashokit',
-		nexusUrl: '',
-		protocol: 'http',
-		repository: 'ashokit-release'
-		version: '1.0.0'
-	}
+	nexusArtifactUploader artifacts: [[artifactId: '01-maven-web-app', classifier: '', file: 'target/01-maven-web-app.war', type: 'war']], credentialsId: 'Nexus-credentials', groupId: 'in.ashokit', nexusUrl: '54.144.93.132:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'ashokit-snapshot', version: '1.0-SNAPSHOT'
 }
-    
-    stage('Build Image'){
-        sh 'docker build -t ashokit/mavenwebapp .'
+    stage('Deploy to tomcat'){
+        sshagent(['tomcat-server-agent']) {
+    sh 'scp -o StrictHostKeyChecking=no target/01-maven-web-app.war ubuntu@52.90.3.24:/opt/tomcat/webapps'
+}
     }
-    
-    stage('Push Image'){
-        withCredentials([string(credentialsId: 'DOCKER-CREDENTIALS', variable: 'DOCKER_CREDENTIALS')]) {
-            sh 'docker login -u ashokit -p ${DOCKER_CREDENTIALS}'
-        }
-        sh 'docker push ashokit/mavenwebapp'
-    }
-    
-    stage('Deploy App'){
-        kubernetesDeploy(
-            configs: 'maven-web-app-deploy.yml',
-            kubeconfigId: 'Kube-Config'
-        )
-    }    
 }
